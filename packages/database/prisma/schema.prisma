@@ -29,12 +29,34 @@ model Kiosk {
   updatedAt      DateTime     @updatedAt
 
   printer        Printer?
+  shopId         String?
+  shop           Shop?        @relation(fields: [shopId], references: [id])
   sessions       Session[]
   printJobs      PrintJob[]
   printCodes     PrintCode[]  @relation("AllowedKiosk")
   auditLogs      AuditLog[]
 
   @@map("kiosks")
+}
+
+// ── Shops (Multi-Shop Architecture) ──
+model Shop {
+  id             String       @id @default(uuid())
+  name           String
+  code           String       @unique
+  address        String?
+  location       String?
+  phone          String?
+  status         String       @default("ACTIVE") // ACTIVE, INACTIVE
+  defaultKioskId String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  kiosks         Kiosk[]
+  adminUsers     AdminUser[]
+  printJobs      PrintJob[]
+
+  @@map("shops")
 }
 
 // ── Printers ──
@@ -96,6 +118,7 @@ model PrintJob {
   sessionId      String
   fileId         String
   kioskId        String?
+  shopId         String?
   printMethod    String       // QR, CODE
   status         String       @default("CREATED") // CREATED, PAYMENT_PENDING, PAYMENT_PROCESSING, PAID, PAYMENT_FAILED, QUEUED, SENDING, PRINTING, COMPLETED, PRINT_FAILED, CANCELLED, REFUND_PENDING, REFUNDED
   colorMode      String       // BW, COLOR
@@ -119,6 +142,7 @@ model PrintJob {
   session        Session      @relation(fields: [sessionId], references: [id])
   file           File         @relation(fields: [fileId], references: [id])
   kiosk          Kiosk?       @relation(fields: [kioskId], references: [id])
+  shop           Shop?        @relation(fields: [shopId], references: [id])
   payment        Payment?
   printCode      PrintCode?
 
@@ -225,9 +249,12 @@ model AdminUser {
   email          String       @unique
   passwordHash   String
   name           String
-  role           String       @default("admin")
+  role           String       @default("SHOP_ADMIN") // SUPER_ADMIN, SHOP_ADMIN
+  shopId         String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  shop           Shop?        @relation(fields: [shopId], references: [id])
 
   @@map("admin_users")
 }

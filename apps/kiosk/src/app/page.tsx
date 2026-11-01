@@ -317,7 +317,7 @@ export default function KioskApp() {
   };
 
   // ── Verify Code & Direct Print (No extra verify button needed) ──
-  const verifyAndPrintCode = async (fullCode: string) => {
+  const verifyAndPrintCode = useCallback(async (fullCode: string) => {
     setIsVerifying(true);
     setError('');
 
@@ -400,55 +400,126 @@ export default function KioskApp() {
         setCode(['', '', '', '', '', '']);
       }, 1800);
     }
-  };
+  }, []);
 
   // ── Numpad Tap Handler ──
-  const handleDigitPress = (digit: string) => {
+  const handleDigitPress = useCallback((digit: string) => {
     if (isVerifying) return;
     resetIdleTimer();
 
-    const emptyIdx = code.findIndex((d) => d === '');
-    if (emptyIdx === -1) return;
+    setCode((prevCode) => {
+      const emptyIdx = prevCode.findIndex((d) => d === '');
+      if (emptyIdx === -1) return prevCode;
 
-    playKeySound('tap');
-    const newCode = [...code];
-    newCode[emptyIdx] = digit;
-    setCode(newCode);
+      playKeySound('tap');
+      const newCode = [...prevCode];
+      newCode[emptyIdx] = digit;
 
-    // If 6th digit entered, auto-verify and start printing immediately!
-    if (emptyIdx === 5) {
-      const fullCode = newCode.join('');
-      verifyAndPrintCode(fullCode);
-    }
-  };
+      // If 6th digit entered, auto-verify and start printing immediately!
+      if (emptyIdx === 5) {
+        const fullCode = newCode.join('');
+        verifyAndPrintCode(fullCode);
+      }
+      return newCode;
+    });
+  }, [isVerifying, resetIdleTimer, verifyAndPrintCode]);
 
   // ── Backspace Handler ──
-  const handleBackspace = () => {
+  const handleBackspace = useCallback(() => {
     if (isVerifying) return;
     resetIdleTimer();
     playKeySound('delete');
 
-    const filledIndices = code
-      .map((d, i) => (d !== '' ? i : -1))
-      .filter((i) => i !== -1);
+    setCode((prevCode) => {
+      const filledIndices = prevCode
+        .map((d, i) => (d !== '' ? i : -1))
+        .filter((i) => i !== -1);
 
-    if (filledIndices.length === 0) return;
-    const lastFilled = filledIndices[filledIndices.length - 1];
+      if (filledIndices.length === 0) return prevCode;
+      const lastFilled = filledIndices[filledIndices.length - 1];
 
-    const newCode = [...code];
-    newCode[lastFilled] = '';
-    setCode(newCode);
+      const newCode = [...prevCode];
+      newCode[lastFilled] = '';
+      return newCode;
+    });
     setError('');
-  };
+  }, [isVerifying, resetIdleTimer]);
 
   // ── Clear Code Handler ──
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     if (isVerifying) return;
     resetIdleTimer();
     playKeySound('delete');
     setCode(['', '', '', '', '', '']);
     setError('');
-  };
+  }, [isVerifying, resetIdleTimer]);
+
+  // ── Physical Keyboard Support (Digits 0-9, Numpad, Backspace, Enter, Escape) ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      // 1. Digits 0-9 and Numpad 0-9
+      const digitMatch = e.code.match(/^(Digit|Numpad)([0-9])$/);
+      if (digitMatch || /^[0-9]$/.test(e.key)) {
+        const digit = digitMatch ? digitMatch[2] : e.key;
+        e.preventDefault();
+
+        if (screen === 'idle') {
+          playKeySound('tap');
+          setScreen('code-entry');
+          setCode([digit, '', '', '', '', '']);
+          resetIdleTimer();
+          return;
+        }
+
+        if (screen === 'code-entry') {
+          handleDigitPress(digit);
+          return;
+        }
+      }
+
+      // 2. Backspace
+      if (e.key === 'Backspace') {
+        if (screen === 'code-entry') {
+          e.preventDefault();
+          handleBackspace();
+          return;
+        }
+      }
+
+      // 3. Enter key
+      if (e.key === 'Enter') {
+        if (screen === 'code-entry') {
+          e.preventDefault();
+          const fullCode = code.join('');
+          if (fullCode.length === 6 && !code.includes('')) {
+            verifyAndPrintCode(fullCode);
+          }
+          return;
+        }
+      }
+
+      // 4. Escape key: return to home
+      if (e.key === 'Escape') {
+        if (screen === 'code-entry' || screen === 'qr') {
+          e.preventDefault();
+          playKeySound('tap');
+          setScreen('idle');
+          setCode(['', '', '', '', '', '']);
+          setError('');
+          resetIdleTimer();
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [screen, code, handleDigitPress, handleBackspace, verifyAndPrintCode, resetIdleTimer]);
 
   return (
     <div className="min-h-screen bg-[#f8fbff] text-slate-900 font-sans flex flex-col justify-between select-none overflow-hidden p-6 md:p-10 relative">

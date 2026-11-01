@@ -10,9 +10,12 @@
     @apply bg-dark-950 text-white font-sans antialiased;
     background: linear-gradient(180deg, #020617 0%, #0f172a 50%, #020617 100%);
     min-height: 100vh;
-    cursor: none; /* Hide cursor for touchscreen kiosk */
+    cursor: default; /* Mouse cursor enabled */
     user-select: none;
     overflow: hidden;
+  }
+  button, [role="button"], a {
+    cursor: pointer;
   }
 }
 

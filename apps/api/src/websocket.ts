@@ -77,70 +77,78 @@ export function setupWebSocket(io: SocketIOServer, prisma: PrismaClient): void {
 
     // ── Join kiosk room ──
     socket.on('join_kiosk', async (data: { kioskId: string }) => {
-      if (data.kioskId) {
-        const kiosk = await prisma.kiosk.findFirst({
-          where: {
-            OR: [{ id: data.kioskId }, { displayId: data.kioskId }],
-          },
-        });
-
-        if (kiosk) {
-          socket.join(`kiosk:${kiosk.id}`);
-          socket.data.kioskId = kiosk.id;
-          socket.data.kioskDisplayId = kiosk.displayId;
-          console.log(`🖥️  Kiosk joined: ${kiosk.displayId}`);
-
-          await prisma.kiosk.update({
-            where: { id: kiosk.id },
-            data: { lastHeartbeat: new Date() },
+      try {
+        if (data.kioskId) {
+          const kiosk = await prisma.kiosk.findFirst({
+            where: {
+              OR: [{ id: data.kioskId }, { displayId: data.kioskId }],
+            },
           });
 
-          broadcastAdminStats();
-          io.to('admin').emit('kiosk_heartbeat', {
-            kioskId: kiosk.id,
-            displayId: kiosk.displayId,
-            isOnline: true,
-            lastHeartbeat: new Date().toISOString(),
-          });
+          if (kiosk) {
+            socket.join(`kiosk:${kiosk.id}`);
+            socket.data.kioskId = kiosk.id;
+            socket.data.kioskDisplayId = kiosk.displayId;
+            console.log(`🖥️  Kiosk joined: ${kiosk.displayId}`);
+
+            await prisma.kiosk.update({
+              where: { id: kiosk.id },
+              data: { lastHeartbeat: new Date() },
+            });
+
+            broadcastAdminStats();
+            io.to('admin').emit('kiosk_heartbeat', {
+              kioskId: kiosk.id,
+              displayId: kiosk.displayId,
+              isOnline: true,
+              lastHeartbeat: new Date().toISOString(),
+            });
+          }
         }
+      } catch (err) {
+        console.error('Error handling join_kiosk:', err);
       }
     });
 
     // ── Kiosk heartbeat ──
     socket.on('heartbeat', async (data: any) => {
-      if (socket.data.kioskId) {
-        await prisma.kiosk.update({
-          where: { id: socket.data.kioskId },
-          data: {
-            lastHeartbeat: new Date(),
+      try {
+        if (socket.data.kioskId) {
+          await prisma.kiosk.update({
+            where: { id: socket.data.kioskId },
+            data: {
+              lastHeartbeat: new Date(),
+              cpu: data.cpu,
+              ram: data.ram,
+              disk: data.disk,
+              appVersion: data.appVersion,
+            },
+          });
+
+          if (data.printerStatus) {
+            await prisma.printer.updateMany({
+              where: { kioskId: socket.data.kioskId },
+              data: {
+                status: data.printerStatus,
+                currentJobId: data.currentJobId || null,
+              },
+            });
+          }
+
+          // Notify real-time admin portal
+          io.to('admin').emit('kiosk_heartbeat', {
+            kioskId: socket.data.kioskId,
+            displayId: socket.data.kioskDisplayId,
             cpu: data.cpu,
             ram: data.ram,
             disk: data.disk,
-            appVersion: data.appVersion,
-          },
-        });
-
-        if (data.printerStatus) {
-          await prisma.printer.updateMany({
-            where: { kioskId: socket.data.kioskId },
-            data: {
-              status: data.printerStatus,
-              currentJobId: data.currentJobId || null,
-            },
+            printerStatus: data.printerStatus,
+            isOnline: true,
+            lastHeartbeat: new Date().toISOString(),
           });
         }
-
-        // Notify real-time admin portal
-        io.to('admin').emit('kiosk_heartbeat', {
-          kioskId: socket.data.kioskId,
-          displayId: socket.data.kioskDisplayId,
-          cpu: data.cpu,
-          ram: data.ram,
-          disk: data.disk,
-          printerStatus: data.printerStatus,
-          isOnline: true,
-          lastHeartbeat: new Date().toISOString(),
-        });
+      } catch (err) {
+        console.error('Error handling kiosk heartbeat:', err);
       }
     });
 

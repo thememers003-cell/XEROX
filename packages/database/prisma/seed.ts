@@ -31,44 +31,68 @@ async function main() {
 
   console.log('✅ Pricing rules created');
 
+  // ── Create Default Shop ──
+  const defaultShop = await prisma.shop.upsert({
+    where: { code: 'SHOP-MAIN' },
+    update: {},
+    create: {
+      name: 'Main Campus Print Hub',
+      code: 'SHOP-MAIN',
+      address: 'Central Library Building, Ground Floor',
+      phone: '+91 98765 43210',
+      status: 'ACTIVE',
+    },
+  });
+
+  console.log('✅ Default shop created:', defaultShop.name);
+
   // ── Create Demo Kiosks ──
   const kiosk1 = await prisma.kiosk.upsert({
     where: { displayId: 'XPOS-001' },
-    update: {},
+    update: { shopId: defaultShop.id },
     create: {
       displayId: 'XPOS-001',
       name: 'College Library Kiosk',
       location: 'College Library, Ground Floor',
       status: 'ACTIVE',
       qrUrl: 'http://localhost:3000/print?kiosk=XPOS-001',
+      shopId: defaultShop.id,
     },
+  });
+
+  // Set default kiosk for shop
+  await prisma.shop.update({
+    where: { id: defaultShop.id },
+    data: { defaultKioskId: kiosk1.id },
   });
 
   const kiosk2 = await prisma.kiosk.upsert({
     where: { displayId: 'XPOS-002' },
-    update: {},
+    update: { shopId: defaultShop.id },
     create: {
       displayId: 'XPOS-002',
       name: 'Hostel Block A Kiosk',
       location: 'Hostel Block A, Reception',
       status: 'ACTIVE',
       qrUrl: 'http://localhost:3000/print?kiosk=XPOS-002',
+      shopId: defaultShop.id,
     },
   });
 
   const kiosk3 = await prisma.kiosk.upsert({
     where: { displayId: 'XPOS-003' },
-    update: {},
+    update: { shopId: defaultShop.id },
     create: {
       displayId: 'XPOS-003',
       name: 'Main Gate Kiosk',
       location: 'Main Gate, Security Office',
       status: 'MAINTENANCE',
       qrUrl: 'http://localhost:3000/print?kiosk=XPOS-003',
+      shopId: defaultShop.id,
     },
   });
 
-  console.log('✅ Demo kiosks created');
+  console.log('✅ Demo kiosks created and linked to shop');
 
   // ── Create Printers for Kiosks ──
   await prisma.printer.upsert({
@@ -106,24 +130,44 @@ async function main() {
 
   console.log('✅ Printers created');
 
-  // ── Create Admin User ──
-  const passwordHash = crypto
+  // ── Create Super Admin User ──
+  const superAdminPasswordHash = crypto
     .createHash('sha256')
     .update('admin123')
     .digest('hex');
 
   await prisma.adminUser.upsert({
     where: { email: 'admin@xpos.app' },
-    update: {},
+    update: { role: 'SUPER_ADMIN' },
     create: {
       email: 'admin@xpos.app',
-      passwordHash,
-      name: 'XPOS Admin',
-      role: 'admin',
+      passwordHash: superAdminPasswordHash,
+      name: 'XPOS Super Admin',
+      role: 'SUPER_ADMIN',
     },
   });
 
-  console.log('✅ Admin user created (admin@xpos.app / admin123)');
+  console.log('✅ Super Admin user created (admin@xpos.app / admin123)');
+
+  // ── Create Shop Admin User ──
+  const shopAdminPasswordHash = crypto
+    .createHash('sha256')
+    .update('shop123')
+    .digest('hex');
+
+  await prisma.adminUser.upsert({
+    where: { email: 'shopadmin@xpos.app' },
+    update: { role: 'SHOP_ADMIN', shopId: defaultShop.id },
+    create: {
+      email: 'shopadmin@xpos.app',
+      passwordHash: shopAdminPasswordHash,
+      name: 'Main Campus Shop Admin',
+      role: 'SHOP_ADMIN',
+      shopId: defaultShop.id,
+    },
+  });
+
+  console.log('✅ Shop Admin user created (shopadmin@xpos.app / shop123)');
 
   // ── Create Default Settings ──
   const settings = [

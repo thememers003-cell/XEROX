@@ -2,8 +2,20 @@
 // XPOS API Server — Main entry point
 // ============================================================
 
+import path from 'path';
 import dotenv from 'dotenv';
-dotenv.config({ path: '../../.env' });
+
+// Multi-path fallback so .env is loaded regardless of execution directory
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception thrown:', err);
+});
 
 import express from 'express';
 import cors from 'cors';
@@ -67,8 +79,10 @@ app.locals.storage = storage;
 app.locals.payment = payment;
 app.locals.printer = printer;
 
-// Run SQLite WAL cleanup
-prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => {});
+// Run SQLite WAL cleanup only if using SQLite
+if (process.env.DATABASE_URL?.includes('file:') || process.env.DATABASE_URL?.includes('sqlite')) {
+  prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => {});
+}
 
 // ── Socket.IO ──
 const io = new SocketIOServer(httpServer, {
